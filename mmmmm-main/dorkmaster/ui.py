@@ -196,13 +196,18 @@ class DorkStrikeUI:
         findings_frame.columnconfigure(0, weight=1)
         findings_frame.rowconfigure(0, weight=1)
 
-        # Findings treeview
-        columns = ("Type", "Pattern", "URL", "Match", "Verification")
+        # Findings treeview with Status column
+        columns = ("Type", "Pattern", "URL", "Match", "Status", "Verification")
         self.findings_tree = ttk.Treeview(findings_frame, columns=columns, show="headings", height=10)
 
         for col in columns:
             self.findings_tree.heading(col, text=col)
-            self.findings_tree.column(col, width=120)
+            if col == "URL":
+                self.findings_tree.column(col, width=200)
+            elif col == "Status":
+                self.findings_tree.column(col, width=80)
+            else:
+                self.findings_tree.column(col, width=120)
 
         findings_scrollbar = ttk.Scrollbar(findings_frame, orient=tk.VERTICAL, command=self.findings_tree.yview)
         self.findings_tree.configure(yscrollcommand=findings_scrollbar.set)
@@ -346,7 +351,9 @@ class DorkStrikeUI:
         self.root.after(0, lambda: self.status_var.set(message))
 
     def finding_callback(self, finding_type, pattern, url, match, verification):
-        finding = (finding_type, pattern, url, match, verification)
+        # Status is RAW by default (simplified analyze_response always returns RAW)
+        status = "RAW"
+        finding = (finding_type, pattern, url, match, status, verification)
         self.all_findings.append(finding)
         self.root.after(0, lambda: self.findings_tree.insert("", tk.END, values=finding))
 
@@ -403,7 +410,8 @@ class DorkStrikeUI:
                             f.write(f"Pattern: {finding[1]}\n")
                             f.write(f"URL: {finding[2]}\n")
                             f.write(f"Match: {finding[3]}\n")
-                            f.write(f"Verification: {finding[4]}\n")
+                            f.write(f"Status: {finding[4]}\n")
+                            f.write(f"Verification: {finding[5]}\n")
                             f.write("-"*30 + "\n")
 
                 elif fmt == "JSON":
@@ -414,7 +422,8 @@ class DorkStrikeUI:
                             "pattern": finding[1],
                             "url": finding[2],
                             "match": finding[3],
-                            "verification": finding[4]
+                            "status": finding[4],
+                            "verification": finding[5]
                         })
                     with open(filepath, 'w') as f:
                         json.dump(results, f, indent=2)
@@ -422,7 +431,7 @@ class DorkStrikeUI:
                 elif fmt == "CSV":
                     with open(filepath, 'w', newline='') as f:
                         writer = csv.writer(f)
-                        writer.writerow(["Type", "Pattern", "URL", "Match", "Verification"])
+                        writer.writerow(["Type", "Pattern", "URL", "Match", "Status", "Verification"])
                         for finding in self.all_findings:
                             writer.writerow(finding)
 
@@ -434,7 +443,8 @@ class DorkStrikeUI:
                         ET.SubElement(item, "pattern").text = finding[1]
                         ET.SubElement(item, "url").text = finding[2]
                         ET.SubElement(item, "match").text = finding[3]
-                        ET.SubElement(item, "verification").text = finding[4]
+                        ET.SubElement(item, "status").text = finding[4]
+                        ET.SubElement(item, "verification").text = finding[5]
                     
                     tree = ET.ElementTree(root)
                     tree.write(filepath, encoding='utf-8', xml_declaration=True)

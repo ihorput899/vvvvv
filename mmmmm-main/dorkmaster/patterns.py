@@ -5,10 +5,36 @@ import math
 import hashlib
 import base58
 import ecdsa
-import asyncio
-import aiohttp
 from Crypto.Hash import keccak
 from typing import List, Dict, Any, Optional, Tuple
+
+# ============================================
+# DORK KEYWORDS - простые списки для поиска
+# ============================================
+DORK_KEYWORDS = {
+    'extensions': [
+        '.env', '.config.php', '.backup.sql', '.sql', '.db', '.zip', 
+        '.tar.gz', '.bak', '.old', '.json', '.yml', '.yaml', '.ini', 
+        '.conf', '.cnf', '.key', '.pem', '.crt', '.p12', '.pfx', 
+        '.jks', '.keystore', '.dump', '.backup', '.log', '.txt', 
+        '.csv', '.out', '.save', '.tmp', '.orig', '.swp', '.cfg', 
+        '.config', '.properties'
+    ],
+    'keywords': [
+        'config', 'backup', 'database', 'dump', 'secret', 'key', 
+        'token', 'api', 'password', 'admin', 'login', 'dashboard', 
+        'cpanel', 'wp-admin', 'pma', 'phpmyadmin', 'env', 'credentials'
+    ],
+    'paths': [
+        'admin', 'backup', 'tmp', 'old', 'test', 'dev', 'staging', 
+        'debug', 'config', 'logs', 'archive', 'dump', 'export', 
+        'private', 'secret', 'keys', 'tokens'
+    ]
+}
+
+# ============================================
+# REGEX PATTERNS - только для поиска в тексте
+# ============================================
 
 def calculate_shannon_entropy(string: str) -> float:
     """Calculate Shannon entropy of a string."""
@@ -145,25 +171,17 @@ def is_valid_zec_address(address: str) -> bool:
     except:
         return False
 
-def validate_crypto_pattern(pattern_name: str, match: str, raw_mode: bool = False) -> Tuple[bool, str]:
+# ============================================
+# OPTIONAL VALIDATION FUNCTIONS
+# Эти функции сохранены для опциональной верификации,
+# но больше не используются в основном потоке analyze_response
+# ============================================
+
+def validate_crypto_pattern_optional(pattern_name: str, match: str) -> Tuple[bool, str]:
     """
-    Validate crypto wallet/address patterns with checksums.
-
-    In RAW MODE: Returns True for ALL matches without validation
-    In STRICT MODE: Applies checksum validation and entropy checks
-
-    Args:
-        pattern_name: Name of the crypto pattern (BTC, ETH, etc.)
-        match: The matched string to validate
-        raw_mode: If True, skip validation and accept all matches
-
-    Returns:
-        Tuple of (is_valid, status_message)
+    OPTIONAL: Validate crypto wallet/address patterns with checksums.
+    This function is kept for optional verification but not used in main flow.
     """
-    if raw_mode:
-        # RAW MODE: Accept all matches without validation
-        return True, "RAW_MATCH"
-
     is_valid = True
     if pattern_name == "BTC" and (match.startswith(('1', '3')) or match.startswith('bc1')):
         is_valid = is_valid_btc_address(match)
@@ -181,7 +199,6 @@ def validate_crypto_pattern(pattern_name: str, match: str, raw_mode: bool = Fals
         is_valid = is_valid_dash_address(match)
     elif pattern_name == "ZEC" and match.startswith(('t1', 't3')):
         is_valid = is_valid_zec_address(match)
-    # For other patterns, use entropy check as fallback
     elif len(match) > 10:
         entropy = calculate_shannon_entropy(match)
         if entropy > 4.0:
@@ -192,30 +209,15 @@ def validate_crypto_pattern(pattern_name: str, match: str, raw_mode: bool = Fals
         return True, "Format valid"
     return False, "Invalid checksum"
 
-def validate_secret_pattern(pattern_name: str, match: str, raw_mode: bool = False) -> Tuple[bool, str]:
+def validate_secret_pattern_optional(pattern_name: str, match: str) -> Tuple[bool, str]:
     """
-    Validate secret patterns using entropy analysis.
-
-    In RAW MODE: Returns True for ALL matches without validation
-    In STRICT MODE: Applies entropy-based validation
-
-    Args:
-        pattern_name: Name of the secret pattern (API Key, JWT, etc.)
-        match: The matched string to validate
-        raw_mode: If True, skip validation and accept all matches
-
-    Returns:
-        Tuple of (is_valid, status_message)
+    OPTIONAL: Validate secret patterns using entropy analysis.
+    This function is kept for optional verification but not used in main flow.
     """
-    if raw_mode:
-        # RAW MODE: Accept all matches without validation
-        return True, "RAW_MATCH"
-
     if len(match) < 8:
         return False, "Too short"
 
     entropy = calculate_shannon_entropy(match)
-    # Different entropy thresholds for different secret types
     if pattern_name in ["API Key", "JWT", "AWS", "GCP", "Azure", "Bearer Token"]:
         if entropy > 4.5:
             return True, "Format valid"
@@ -233,104 +235,9 @@ def validate_secret_pattern(pattern_name: str, match: str, raw_mode: bool = Fals
         return True, "Format valid"
     return False, "Low entropy"
 
-async def verify_aws_key(access_key: str, secret_key: Optional[str] = None) -> Tuple[bool, str]:
-    """Verify AWS access key by making a safe API call."""
-    try:
-        # Use AWS STS GetCallerIdentity - safe, read-only call
-        import boto3
-        from botocore.exceptions import ClientError
-
-        # If we only have access key, we can't verify without secret
-        if not secret_key:
-            return False, "Secret key required for verification"
-
-        sts_client = boto3.client(
-            'sts',
-            aws_access_key_id=access_key,
-            aws_secret_access_key=secret_key,
-            region_name='us-east-1'
-        )
-
-        response = sts_client.get_caller_identity()
-        account_id = response.get('Account')
-        return bool(account_id), f"Valid AWS key for account {account_id}"
-
-    except ClientError as e:
-        error_code = e.response['Error']['Code']
-        if error_code in ['InvalidAccessKeyId', 'SignatureDoesNotMatch']:
-            return False, "Invalid AWS credentials"
-        return False, f"AWS API error: {error_code}"
-    except Exception as e:
-        return False, f"Error verifying AWS key: {str(e)}"
-
-async def verify_github_token(token: str) -> Tuple[bool, str]:
-    """Verify GitHub token by checking user info."""
-    try:
-        async with aiohttp.ClientSession() as session:
-            headers = {'Authorization': f'token {token}'}
-            async with session.get('https://api.github.com/user', headers=headers) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    username = data.get('login', 'unknown')
-                    return True, f"Valid GitHub token for user {username}"
-                elif response.status == 401:
-                    return False, "Invalid GitHub token"
-                else:
-                    return False, f"GitHub API error: {response.status}"
-    except Exception as e:
-        return False, f"Error verifying GitHub token: {str(e)}"
-
-async def verify_stripe_key(api_key: str) -> Tuple[bool, str]:
-    """Verify Stripe API key by checking balance."""
-    try:
-        async with aiohttp.ClientSession() as session:
-            headers = {'Authorization': f'Bearer {api_key}'}
-            async with session.get('https://api.stripe.com/v1/balance', headers=headers) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    available = data.get('available', [{}])[0].get('amount', 0)
-                    return True, f"Valid Stripe key (balance: {available})"
-                elif response.status == 401:
-                    return False, "Invalid Stripe API key"
-                else:
-                    return False, f"Stripe API error: {response.status}"
-    except Exception as e:
-        return False, f"Error verifying Stripe key: {str(e)}"
-
-async def verify_slack_token(token: str) -> Tuple[bool, str]:
-    """Verify Slack token by checking auth."""
-    try:
-        async with aiohttp.ClientSession() as session:
-            headers = {'Authorization': f'Bearer {token}'}
-            async with session.post('https://slack.com/api/auth.test', headers=headers) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    if data.get('ok'):
-                        team = data.get('team', 'unknown')
-                        return True, f"Valid Slack token for team {team}"
-                    else:
-                        return False, f"Invalid Slack token: {data.get('error', 'unknown error')}"
-                else:
-                    return False, f"Slack API error: {response.status}"
-    except Exception as e:
-        return False, f"Error verifying Slack token: {str(e)}"
-
-async def verify_api_key(pattern_name: str, api_key: str) -> Tuple[bool, str]:
-    """Verify API key based on pattern type."""
-    if pattern_name == "AWS":
-        # For AWS, we need both access key and secret, but we only have access key from regex
-        # So we'll do a basic format check only
-        return True, "AWS key format valid (full verification requires secret key)"
-    elif pattern_name == "GitHub Token" and api_key.startswith('ghp_'):
-        return await verify_github_token(api_key)
-    elif pattern_name == "Stripe Key" and api_key.startswith(('sk_live_', 'sk_test_')):
-        return await verify_stripe_key(api_key)
-    elif pattern_name == "Slack Token" and api_key.startswith(('xoxb-', 'xoxp-', 'xoxa-')):
-        return await verify_slack_token(api_key)
-    else:
-        # For other API keys, just do format validation
-        return True, "API key format appears valid"
-
+# ============================================
+# REGEX PATTERNS - основная структура для поиска в тексте
+# ============================================
 PATTERNS = {
     "CRYPTO": {
         "ETH": r"(?<![a-zA-Z0-9])0x[a-fA-F0-9]{40}(?![a-zA-Z0-9])",

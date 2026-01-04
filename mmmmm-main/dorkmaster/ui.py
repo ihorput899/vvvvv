@@ -31,6 +31,7 @@ TRANSLATIONS = {
     'threads': 'Потоки:',
     'depth': 'Глубина:',
     'engines': 'Поисковики:',
+    'sources': 'Источники:',
     
     # Categories
     'cat_all': 'ВСЕ',
@@ -58,6 +59,7 @@ TRANSLATIONS = {
     'findings_stat': 'Найдено:',
     'req_min_stat': 'Запр./мин:',
     'wayback_urls_stat': 'URL из Wayback:',
+    'github_files_stat': 'Файлов GitHub:',
     'downloaded_stat': 'Загружено:',
     'raw_matches_stat': 'Совпадений RAW:',
     'mode_stat': 'Режим:',
@@ -107,6 +109,10 @@ TRANSLATIONS = {
     'all_proxies_cleared': 'Все прокси очищены',
     'no_proxy_selected': 'Прокси не выбран',
     'testing_proxy_log': 'Тестирование прокси: ',
+
+    # Generic
+    'save': 'Сохранить',
+    'select_sources_msg': 'Пожалуйста, выберите хотя бы один источник (Wayback или GitHub)',
 }
 
 class DorkStrikeUI:
@@ -211,10 +217,25 @@ class DorkStrikeUI:
         depth_spin = tk.Spinbox(settings_frame, from_=1, to=10, textvariable=self.depth_var, width=8)
         depth_spin.grid(row=2, column=3, sticky=tk.W, pady=5)
 
-        # Search Engines
-        ttk.Label(settings_frame, text=TRANSLATIONS['engines']).grid(row=3, column=0, sticky=tk.W, padx=(0, 10), pady=5)
+        # Sources
+        ttk.Label(settings_frame, text=TRANSLATIONS['sources']).grid(row=3, column=0, sticky=tk.W, padx=(0, 10), pady=5)
+        sources_frame = ttk.Frame(settings_frame)
+        sources_frame.grid(row=3, column=1, columnspan=5, sticky=tk.W, pady=5)
+
+        self.source_vars = {}
+        sources = {
+            'wayback': 'Wayback Machine (история домена)',
+            'github': 'GitHub (утёкшие репо)'
+        }
+        for source, label in sources.items():
+            var = tk.BooleanVar(value=(source == 'wayback'))
+            self.source_vars[source] = var
+            ttk.Checkbutton(sources_frame, text=label, variable=var).pack(anchor=tk.W, pady=2)
+
+        # Search Engines (legacy)
+        ttk.Label(settings_frame, text=TRANSLATIONS['engines']).grid(row=4, column=0, sticky=tk.W, padx=(0, 10), pady=5)
         engines_frame = ttk.Frame(settings_frame)
-        engines_frame.grid(row=3, column=1, columnspan=4, sticky=tk.W, pady=5)
+        engines_frame.grid(row=4, column=1, columnspan=4, sticky=tk.W, pady=5)
 
         self.engine_vars = {}
         engines = ['google', 'duckduckgo', 'bing', 'shodan', 'wayback']
@@ -272,7 +293,9 @@ class DorkStrikeUI:
         stats_frame.pack(fill=tk.X, pady=(0, 10))
 
         # Top stats line
-        self.stats_line1_var = tk.StringVar(value=f"{TRANSLATIONS['urls_scanned_stat']} 0 | {TRANSLATIONS['findings_stat']} 0 | {TRANSLATIONS['req_min_stat']} 0 | {TRANSLATIONS['wayback_urls_stat']} 0 | {TRANSLATIONS['downloaded_stat']} 0 | {TRANSLATIONS['raw_matches_stat']} 0")
+        self.stats_line1_var = tk.StringVar(
+            value=f"{TRANSLATIONS['urls_scanned_stat']} 0 | {TRANSLATIONS['findings_stat']} 0 (W:0 G:0) | {TRANSLATIONS['req_min_stat']} 0 | {TRANSLATIONS['wayback_urls_stat']} 0 | {TRANSLATIONS['github_files_stat']} 0 | {TRANSLATIONS['downloaded_stat']} 0 | {TRANSLATIONS['raw_matches_stat']} 0"
+        )
         stats_line1 = ttk.Label(stats_frame, textvariable=self.stats_line1_var, font=("Courier", 9))
         stats_line1.pack(fill=tk.X)
 
@@ -355,8 +378,17 @@ class DorkStrikeUI:
             self.progress_var.set(0)
             self.all_findings = []
 
-            # Get selected search engines
+            # Get selected search engines (legacy)
             search_engines = [engine for engine, var in self.engine_vars.items() if var.get()]
+
+            # Get selected sources
+            sources = [source for source, var in self.source_vars.items() if var.get()]
+            if not sources:
+                messagebox.showerror(TRANSLATIONS['error'], TRANSLATIONS['select_sources_msg'])
+                self.scanning = False
+                self.start_button.config(state=tk.NORMAL)
+                self.stop_button.config(state=tk.DISABLED)
+                return
 
             # Get proxies from list
             proxies = []
@@ -370,9 +402,10 @@ class DorkStrikeUI:
             except:
                 delay = 5.0
 
-            # Update window title to show RAW MODE
+            # Update window title to show RAW MODE and sources
+            sources_display = "+".join([s.upper() for s in sources])
             if self.raw_mode_var.get():
-                self.root.title("DorkStrike PRO - 🔴 RAW MODE: Wayback")
+                self.root.title(f"DorkStrike PRO - 🔴 RAW MODE: {sources_display}")
             else:
                 self.root.title("DorkStrike PRO")
 
@@ -380,11 +413,12 @@ class DorkStrikeUI:
             self.scanner = DorkScanner(
                 proxies=proxies,
                 search_engines=search_engines,
+                sources=sources,
                 delay=delay,
                 proxy_type=self.proxy_type_var.get(),
                 ua_rotate=self.ua_rotate_var.get(),
                 raw_mode=self.raw_mode_var.get(),
-                ui_callback=self.on_finding_found
+                ui_callback=self.on_finding_found,
             )
 
             # Update stats display
@@ -451,15 +485,28 @@ class DorkStrikeUI:
         if not self.scanner:
             return
 
-        # Line 1: URLs Scanned: 0 | Findings: 0 | Req/min: 0 | Wayback URLs: 0 | Downloaded: 0 | RAW Matches: 0
         urls_scanned = getattr(self.scanner, 'urls_scanned', 0)
-        findings = len(self.all_findings)
+        findings_total = len(self.all_findings)
         req_per_min = getattr(self.scanner, 'req_per_min', 0)
-        wayback_urls = getattr(self.scanner, 'total_urls', 0)
+
+        wayback_urls = getattr(self.scanner, 'wayback_total_urls', 0)
+        github_files = getattr(self.scanner, 'github_total_urls', 0)
+
         downloaded = getattr(self.scanner, 'download_success_count', 0)
         raw_matches = getattr(self.scanner, 'regex_match_count', 0)
-        
-        line1 = f"{TRANSLATIONS['urls_scanned_stat']} {urls_scanned} | {TRANSLATIONS['findings_stat']} {findings} | {TRANSLATIONS['req_min_stat']} {req_per_min} | {TRANSLATIONS['wayback_urls_stat']} {wayback_urls} | {TRANSLATIONS['downloaded_stat']} {downloaded} | {TRANSLATIONS['raw_matches_stat']} {raw_matches}"
+
+        wayback_findings = sum(1 for f in self.all_findings if len(f) > 1 and f[1] == 'WAYBACK')
+        github_findings = sum(1 for f in self.all_findings if len(f) > 1 and f[1] == 'GITHUB')
+
+        line1 = (
+            f"{TRANSLATIONS['urls_scanned_stat']} {urls_scanned} | "
+            f"{TRANSLATIONS['findings_stat']} {findings_total} (W:{wayback_findings} G:{github_findings}) | "
+            f"{TRANSLATIONS['req_min_stat']} {req_per_min} | "
+            f"{TRANSLATIONS['wayback_urls_stat']} {wayback_urls} | "
+            f"{TRANSLATIONS['github_files_stat']} {github_files} | "
+            f"{TRANSLATIONS['downloaded_stat']} {downloaded} | "
+            f"{TRANSLATIONS['raw_matches_stat']} {raw_matches}"
+        )
         self.stats_line1_var.set(line1)
 
         # Line 2: Mode: STRICT | Proxies: 0 | UA Rotation: ON
@@ -516,13 +563,33 @@ class DorkStrikeUI:
         self.findings_tree.see(self.findings_tree.get_children()[-1])
 
     def update_statistics(self, results):
-        self.stats_line1_var.set(f"{TRANSLATIONS['urls_scanned_stat']} {results.get('total_urls', 0)} | {TRANSLATIONS['findings_stat']} {results.get('findings_count', 0)} | {TRANSLATIONS['req_min_stat']} {results.get('req_per_min', 0)} | {TRANSLATIONS['wayback_urls_stat']} {results.get('total_urls', 0)} | {TRANSLATIONS['downloaded_stat']} {results.get('download_success', 0)} | {TRANSLATIONS['raw_matches_stat']} {results.get('regex_matches', 0)}")
-        
+        total_urls = results.get('total_urls', 0)
+        findings_total = results.get('findings_count', 0)
+        req_per_min = results.get('req_per_min', 0)
+
+        wayback_urls = getattr(self.scanner, 'wayback_total_urls', 0) if self.scanner else 0
+        github_files = getattr(self.scanner, 'github_total_urls', 0) if self.scanner else 0
+
+        wayback_findings = sum(1 for f in self.all_findings if len(f) > 1 and f[1] == 'WAYBACK')
+        github_findings = sum(1 for f in self.all_findings if len(f) > 1 and f[1] == 'GITHUB')
+
+        self.stats_line1_var.set(
+            f"{TRANSLATIONS['urls_scanned_stat']} {total_urls} | "
+            f"{TRANSLATIONS['findings_stat']} {findings_total} (W:{wayback_findings} G:{github_findings}) | "
+            f"{TRANSLATIONS['req_min_stat']} {req_per_min} | "
+            f"{TRANSLATIONS['wayback_urls_stat']} {wayback_urls} | "
+            f"{TRANSLATIONS['github_files_stat']} {github_files} | "
+            f"{TRANSLATIONS['downloaded_stat']} {results.get('download_success', 0)} | "
+            f"{TRANSLATIONS['raw_matches_stat']} {results.get('regex_matches', 0)}"
+        )
+
         mode = TRANSLATIONS['raw'] if self.scanner and self.scanner.raw_mode else TRANSLATIONS['strict']
         proxy_count = len(self.proxies)
         ua_status = TRANSLATIONS['on'] if self.ua_rotate_var.get() else TRANSLATIONS['off']
-        
-        self.stats_line2_var.set(f"{TRANSLATIONS['mode_stat']} {mode} | {TRANSLATIONS['proxies_stat']} {proxy_count} | {TRANSLATIONS['ua_rotation_stat']} {ua_status}")
+
+        self.stats_line2_var.set(
+            f"{TRANSLATIONS['mode_stat']} {mode} | {TRANSLATIONS['proxies_stat']} {proxy_count} | {TRANSLATIONS['ua_rotation_stat']} {ua_status}"
+        )
 
     def save_results(self):
         if not self.all_findings:
@@ -564,11 +631,12 @@ class DorkStrikeUI:
                         f.write("="*50 + "\n\n")
                         for finding in self.all_findings:
                             f.write(f"{TRANSLATIONS['col_type']}: {finding[0]}\n")
-                            f.write(f"{TRANSLATIONS['col_pattern']}: {finding[1]}\n")
-                            f.write(f"{TRANSLATIONS['col_url']}: {finding[2]}\n")
-                            f.write(f"{TRANSLATIONS['col_match']}: {finding[3]}\n")
-                            f.write(f"{TRANSLATIONS['col_status']}: {finding[4]}\n")
-                            f.write(f"{TRANSLATIONS['col_verification']}: {finding[5]}\n")
+                            f.write(f"{TRANSLATIONS['col_source']}: {finding[1]}\n")
+                            f.write(f"{TRANSLATIONS['col_pattern']}: {finding[2]}\n")
+                            f.write(f"{TRANSLATIONS['col_url']}: {finding[3]}\n")
+                            f.write(f"{TRANSLATIONS['col_match']}: {finding[4]}\n")
+                            f.write(f"{TRANSLATIONS['col_status']}: {finding[5]}\n")
+                            f.write(f"{TRANSLATIONS['col_verification']}: {finding[6]}\n")
                             f.write("-"*30 + "\n")
 
                 elif fmt == "JSON":
@@ -576,11 +644,12 @@ class DorkStrikeUI:
                     for finding in self.all_findings:
                         results.append({
                             "type": finding[0],
-                            "pattern": finding[1],
-                            "url": finding[2],
-                            "match": finding[3],
-                            "status": finding[4],
-                            "verification": finding[5]
+                            "source": finding[1],
+                            "pattern": finding[2],
+                            "url": finding[3],
+                            "match": finding[4],
+                            "status": finding[5],
+                            "verification": finding[6],
                         })
                     with open(filepath, 'w') as f:
                         json.dump(results, f, indent=2)
@@ -588,7 +657,15 @@ class DorkStrikeUI:
                 elif fmt == "CSV":
                     with open(filepath, 'w', newline='') as f:
                         writer = csv.writer(f)
-                        writer.writerow([TRANSLATIONS['col_type'], TRANSLATIONS['col_pattern'], TRANSLATIONS['col_url'], TRANSLATIONS['col_match'], TRANSLATIONS['col_status'], TRANSLATIONS['col_verification']])
+                        writer.writerow([
+                            TRANSLATIONS['col_type'],
+                            TRANSLATIONS['col_source'],
+                            TRANSLATIONS['col_pattern'],
+                            TRANSLATIONS['col_url'],
+                            TRANSLATIONS['col_match'],
+                            TRANSLATIONS['col_status'],
+                            TRANSLATIONS['col_verification'],
+                        ])
                         for finding in self.all_findings:
                             writer.writerow(finding)
 
@@ -597,12 +674,13 @@ class DorkStrikeUI:
                     for finding in self.all_findings:
                         item = ET.SubElement(root, "finding")
                         ET.SubElement(item, "type").text = finding[0]
-                        ET.SubElement(item, "pattern").text = finding[1]
-                        ET.SubElement(item, "url").text = finding[2]
-                        ET.SubElement(item, "match").text = finding[3]
-                        ET.SubElement(item, "status").text = finding[4]
-                        ET.SubElement(item, "verification").text = finding[5]
-                    
+                        ET.SubElement(item, "source").text = finding[1]
+                        ET.SubElement(item, "pattern").text = finding[2]
+                        ET.SubElement(item, "url").text = finding[3]
+                        ET.SubElement(item, "match").text = finding[4]
+                        ET.SubElement(item, "status").text = finding[5]
+                        ET.SubElement(item, "verification").text = finding[6]
+
                     tree = ET.ElementTree(root)
                     tree.write(filepath, encoding='utf-8', xml_declaration=True)
 

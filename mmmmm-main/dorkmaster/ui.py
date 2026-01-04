@@ -6,6 +6,7 @@ import threading
 import os
 import csv
 import json
+import queue
 from datetime import datetime
 from scanner import DorkScanner
 from patterns import DorkPatterns
@@ -76,6 +77,7 @@ TRANSLATIONS = {
     'col_url': 'URL',
     'col_match': 'Совпадение',
     'col_status': 'Статус',
+    'col_source': 'Источник',
     'col_verification': 'Проверка',
     'ver_raw': 'RAW',
     'ver_verified': 'ПРОВЕРЕНО',
@@ -110,7 +112,7 @@ TRANSLATIONS = {
 class DorkStrikeUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("DorkStrike PRO - Продвинутый сканер Google Dork")
+        self.root.title("DorkStrike PRO")
         self.root.geometry("1200x800")
         self.root.resizable(True, True)
 
@@ -118,6 +120,10 @@ class DorkStrikeUI:
         self.scanner = None
         self.scanning = False
         self.scan_thread = None
+
+        # Queue for real-time results
+        self.findings_queue = queue.Queue()
+        self.root.after(100, self.process_findings_queue)
 
         # Findings storage for filtering
         self.all_findings = []
@@ -184,31 +190,26 @@ class DorkStrikeUI:
         delay_entry = ttk.Entry(settings_frame, textvariable=self.delay_var, width=8)
         delay_entry.grid(row=1, column=1, sticky=tk.W, padx=(0, 10), pady=5)
 
-        # DNS Verification toggle
-        self.dns_verify_var = tk.BooleanVar(value=True)
-        dns_check = ttk.Checkbutton(settings_frame, text=TRANSLATIONS['dns_verification'], variable=self.dns_verify_var)
-        dns_check.grid(row=1, column=2, sticky=tk.W, padx=(20, 10), pady=5)
-
         # RAW Mode toggle
         self.raw_mode_var = tk.BooleanVar(value=False)
         raw_check = ttk.Checkbutton(settings_frame, text=TRANSLATIONS['raw_mode'], variable=self.raw_mode_var)
-        raw_check.grid(row=1, column=3, sticky=tk.W, padx=(10, 0), pady=5)
+        raw_check.grid(row=1, column=2, sticky=tk.W, padx=(20, 10), pady=5)
 
         # User Agent Rotation toggle
         self.ua_rotate_var = tk.BooleanVar(value=True)
         ua_check = ttk.Checkbutton(settings_frame, text=TRANSLATIONS['rotate_ua'], variable=self.ua_rotate_var)
-        ua_check.grid(row=2, column=0, sticky=tk.W, padx=(0, 10), pady=5)
+        ua_check.grid(row=1, column=3, sticky=tk.W, padx=(10, 0), pady=5)
 
         # Threads and Depth
-        ttk.Label(settings_frame, text=TRANSLATIONS['threads']).grid(row=2, column=1, sticky=tk.W, padx=(20, 5), pady=5)
+        ttk.Label(settings_frame, text=TRANSLATIONS['threads']).grid(row=2, column=0, sticky=tk.W, padx=(0, 10), pady=5)
         self.threads_var = tk.IntVar(value=10)
         threads_spin = tk.Spinbox(settings_frame, from_=1, to=50, textvariable=self.threads_var, width=8)
-        threads_spin.grid(row=2, column=2, sticky=tk.W, padx=(0, 10), pady=5)
+        threads_spin.grid(row=2, column=1, sticky=tk.W, padx=(0, 10), pady=5)
 
-        ttk.Label(settings_frame, text=TRANSLATIONS['depth']).grid(row=2, column=3, sticky=tk.W, padx=(5, 5), pady=5)
+        ttk.Label(settings_frame, text=TRANSLATIONS['depth']).grid(row=2, column=2, sticky=tk.W, padx=(20, 5), pady=5)
         self.depth_var = tk.IntVar(value=3)
         depth_spin = tk.Spinbox(settings_frame, from_=1, to=10, textvariable=self.depth_var, width=8)
-        depth_spin.grid(row=2, column=4, sticky=tk.W, pady=5)
+        depth_spin.grid(row=2, column=3, sticky=tk.W, pady=5)
 
         # Search Engines
         ttk.Label(settings_frame, text=TRANSLATIONS['engines']).grid(row=3, column=0, sticky=tk.W, padx=(0, 10), pady=5)
@@ -292,10 +293,11 @@ class DorkStrikeUI:
         findings_frame.columnconfigure(0, weight=1)
         findings_frame.rowconfigure(0, weight=1)
 
-        # Findings treeview with Status column
-        columns = ("Type", "Pattern", "URL", "Match", "Status", "Verification")
+        # Findings treeview with Status and Source columns
+        columns = ("Type", "Source", "Pattern", "URL", "Match", "Status", "Verification")
         col_names = {
             "Type": TRANSLATIONS['col_type'],
+            "Source": TRANSLATIONS['col_source'],
             "Pattern": TRANSLATIONS['col_pattern'],
             "URL": TRANSLATIONS['col_url'],
             "Match": TRANSLATIONS['col_match'],
@@ -304,12 +306,18 @@ class DorkStrikeUI:
         }
         self.findings_tree = ttk.Treeview(findings_frame, columns=columns, show="headings", height=10)
 
+        # Configure tags for coloring
+        self.findings_tree.tag_configure('raw', background='#ffcccc')      # light red
+        self.findings_tree.tag_configure('verified', background='#ccffcc') # light green
+
         for col in columns:
             self.findings_tree.heading(col, text=col_names[col])
             if col == "URL":
                 self.findings_tree.column(col, width=200)
             elif col == "Status":
                 self.findings_tree.column(col, width=80)
+            elif col == "Source":
+                self.findings_tree.column(col, width=100)
             else:
                 self.findings_tree.column(col, width=120)
 
@@ -362,15 +370,21 @@ class DorkStrikeUI:
             except:
                 delay = 5.0
 
+            # Update window title to show RAW MODE
+            if self.raw_mode_var.get():
+                self.root.title("DorkStrike PRO - 🔴 RAW MODE: Wayback")
+            else:
+                self.root.title("DorkStrike PRO")
+
             # Initialize scanner
             self.scanner = DorkScanner(
                 proxies=proxies,
                 search_engines=search_engines,
                 delay=delay,
-                dns_verify=self.dns_verify_var.get(),
                 proxy_type=self.proxy_type_var.get(),
                 ua_rotate=self.ua_rotate_var.get(),
-                raw_mode=self.raw_mode_var.get()
+                raw_mode=self.raw_mode_var.get(),
+                ui_callback=self.on_finding_found
             )
 
             # Update stats display
@@ -406,8 +420,7 @@ class DorkStrikeUI:
             results = self.scanner.scan(
                 domain, internal_category, threads,
                 self.progress_callback,
-                self.log_callback,
-                self.finding_callback
+                self.log_callback
             )
 
             # Update statistics
@@ -449,13 +462,12 @@ class DorkStrikeUI:
         line1 = f"{TRANSLATIONS['urls_scanned_stat']} {urls_scanned} | {TRANSLATIONS['findings_stat']} {findings} | {TRANSLATIONS['req_min_stat']} {req_per_min} | {TRANSLATIONS['wayback_urls_stat']} {wayback_urls} | {TRANSLATIONS['downloaded_stat']} {downloaded} | {TRANSLATIONS['raw_matches_stat']} {raw_matches}"
         self.stats_line1_var.set(line1)
 
-        # Line 2: Mode: STRICT | DNS: ON | Proxies: 0 | UA Rotation: ON
+        # Line 2: Mode: STRICT | Proxies: 0 | UA Rotation: ON
         mode = TRANSLATIONS['raw'] if self.scanner.raw_mode else TRANSLATIONS['strict']
-        dns = TRANSLATIONS['on'] if self.dns_verify_var.get() else TRANSLATIONS['off']
         proxies = len(self.proxies)
         ua = TRANSLATIONS['on'] if self.ua_rotate_var.get() else TRANSLATIONS['off']
         
-        line2 = f"{TRANSLATIONS['mode_stat']} {mode} | {TRANSLATIONS['dns_stat']} {dns} | {TRANSLATIONS['proxies_stat']} {proxies} | {TRANSLATIONS['ua_rotation_stat']} {ua}"
+        line2 = f"{TRANSLATIONS['mode_stat']} {mode} | {TRANSLATIONS['proxies_stat']} {proxies} | {TRANSLATIONS['ua_rotation_stat']} {ua}"
         self.stats_line2_var.set(line2)
 
     def log_callback(self, message):
@@ -463,32 +475,54 @@ class DorkStrikeUI:
         self.root.after(0, lambda: self.log_text.see(tk.END))
         self.root.after(0, lambda: self.status_var.set(message))
 
-    def finding_callback(self, finding_type, pattern, url, match, verification):
-        # Status is RAW by default (simplified analyze_response always returns RAW)
-        status = TRANSLATIONS['raw']
-        
+    def on_finding_found(self, finding):
+        self.findings_queue.put(finding)
+
+    def process_findings_queue(self):
+        try:
+            while True:
+                finding = self.findings_queue.get_nowait()
+                self.add_finding_to_tree(finding)
+        except queue.Empty:
+            pass
+        self.root.after(100, self.process_findings_queue)
+
+    def add_finding_to_tree(self, finding_data):
         # Translate finding type
         type_map = {
             "CRYPTO": TRANSLATIONS['cat_crypto'],
             "SECRETS": TRANSLATIONS['cat_secrets'],
             "VULNERABILITIES": TRANSLATIONS['cat_vulnerabilities']
         }
-        t_display = type_map.get(finding_type, finding_type)
+        t_display = type_map.get(finding_data.get('type'), finding_data.get('type'))
         
-        v_display = TRANSLATIONS['ver_verified'] if verification == "VERIFIED" else (TRANSLATIONS['ver_raw'] if verification == "RAW" else verification)
-        finding = (t_display, pattern, url, match, status, v_display)
-        self.all_findings.append(finding)
-        self.root.after(0, lambda: self.findings_tree.insert("", tk.END, values=finding))
+        status = finding_data.get('status', 'RAW')
+        v_display = TRANSLATIONS['ver_verified'] if status == "VERIFIED" else TRANSLATIONS['ver_raw']
+        
+        # New order: (Type, Source, Pattern, URL, Match, Status, Verification)
+        finding_values = (
+            t_display,
+            finding_data.get('source', 'WAYBACK'),
+            finding_data.get('pattern'),
+            finding_data.get('url'),
+            finding_data.get('match'),
+            status,
+            v_display
+        )
+        
+        self.all_findings.append(finding_values)
+        tag = 'raw' if status == 'RAW' else 'verified'
+        self.findings_tree.insert("", tk.END, values=finding_values, tags=(tag,))
+        self.findings_tree.see(self.findings_tree.get_children()[-1])
 
     def update_statistics(self, results):
         self.stats_line1_var.set(f"{TRANSLATIONS['urls_scanned_stat']} {results.get('total_urls', 0)} | {TRANSLATIONS['findings_stat']} {results.get('findings_count', 0)} | {TRANSLATIONS['req_min_stat']} {results.get('req_per_min', 0)} | {TRANSLATIONS['wayback_urls_stat']} {results.get('total_urls', 0)} | {TRANSLATIONS['downloaded_stat']} {results.get('download_success', 0)} | {TRANSLATIONS['raw_matches_stat']} {results.get('regex_matches', 0)}")
         
         mode = TRANSLATIONS['raw'] if self.scanner and self.scanner.raw_mode else TRANSLATIONS['strict']
-        dns_status = TRANSLATIONS['on'] if self.dns_verify_var.get() else TRANSLATIONS['off']
         proxy_count = len(self.proxies)
         ua_status = TRANSLATIONS['on'] if self.ua_rotate_var.get() else TRANSLATIONS['off']
         
-        self.stats_line2_var.set(f"{TRANSLATIONS['mode_stat']} {mode} | {TRANSLATIONS['dns_stat']} {dns_status} | {TRANSLATIONS['proxies_stat']} {proxy_count} | {TRANSLATIONS['ua_rotation_stat']} {ua_status}")
+        self.stats_line2_var.set(f"{TRANSLATIONS['mode_stat']} {mode} | {TRANSLATIONS['proxies_stat']} {proxy_count} | {TRANSLATIONS['ua_rotation_stat']} {ua_status}")
 
     def save_results(self):
         if not self.all_findings:

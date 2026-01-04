@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=DorkStrike PRO
+Comment=Продвинутый сканер Google Dork
+Exec=dorkmaster.py
+Path=
+Icon=security-high
+Terminal=false
+Categories=Utility;Security;
+Keywords=dork;scanner;google;security;

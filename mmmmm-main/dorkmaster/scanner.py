@@ -11,8 +11,7 @@ import random
 from urllib.parse import urljoin, urlparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import logging
-from bs4 import BeautifulSoup
-from patterns import DorkPatterns, validate_crypto_pattern, validate_secret_pattern, calculate_shannon_entropy, verify_api_key
+from patterns import DorkPatterns, calculate_shannon_entropy
 from fake_useragent import UserAgent
 
 # Resource classification categories
@@ -167,7 +166,7 @@ class DorkScanner:
         log_callback(f"\n[STAGE 1] SEARCH: Querying Wayback Machine for {target_domain}...")
 
         # SEARCH STAGE - Use Wayback CDX API
-        found_urls = await self.search_wayback_archives(target_domain, log_callback)
+        found_urls = await self.fetch_from_wayback(target_domain, log_callback)
 
         # Also include any custom dorks if they look like direct URLs
         custom_urls = []
@@ -332,7 +331,7 @@ class DorkScanner:
         """
         Generate dork URLs for scanning.
         NOTE: This method is deprecated for remote scanning.
-        Use search_wayback_archives() instead for the new pipeline.
+        Use fetch_from_wayback() instead for the new pipeline.
         Only custom URLs are now supported.
         """
         dork_urls = []
@@ -352,7 +351,7 @@ class DorkScanner:
         Generate search URL for different engines.
 
         DEPRECATED: This method is no longer used for the main scanning pipeline.
-        The scanner now uses Wayback Machine CDX API via search_wayback_archives().
+        The scanner now uses Wayback Machine CDX API via fetch_from_wayback().
         This method is kept for backward compatibility only.
         """
         query_encoded = query.replace(' ', '+')
@@ -371,10 +370,17 @@ class DorkScanner:
             return f"https://web.archive.org/cdx/search/cdx?url={query_encoded}&output=json"
         return None
 
-    async def search_wayback_archives(self, target, log_callback=None):
+    async def fetch_from_wayback(self, target, log_callback=None):
         """
-        Поиск архивных URL через CDX API (Wayback Machine).
-        Ищем файлы по расширению для конкретного домена.
+        Получить исторические URL для целевого домена из web.archive.org API.
+        Использует Wayback CDX API для поиска снимков.
+        
+        Args:
+            target: целевой домен/URL
+            log_callback: функция для логирования прогресса
+            
+        Returns:
+            list: список URL найденных в Wayback Machine
         """
         found_urls = []
         # Extended list of sensitive file extensions
@@ -608,7 +614,19 @@ class DorkScanner:
             return [], time.time() - start_time
 
     def analyze_response(self, html_content, url, pattern_name, category):
-        """Analyze the HTML content for patterns with validation and resource classification."""
+        """
+        Упрощенная функция анализа: просто ищет паттерны через re.findall()
+        и отправляет результат в UI без дополнительных проверок.
+        
+        Args:
+            html_content: текст для анализа
+            url: URL источника
+            pattern_name: имя паттерна для поиска
+            category: категория паттернов (CRYPTO, SECRETS, VULNERABILITIES, ALL)
+            
+        Returns:
+            tuple: (findings, skip_reason)
+        """
         findings = []
         skip_reason = None
 
@@ -647,17 +665,6 @@ class DorkScanner:
 
             for p_name, pattern_data in patterns_to_check.items():
                 regex_patterns = pattern_data.get('regex', [])
-                allow_categories = pattern_data.get('allow_categories', ['A', 'B', 'C'])  # Default to A/B/C
-                deny_categories = pattern_data.get('deny_categories', ['D', 'E'])
-
-                # Check if pattern is allowed for this resource category
-                # In RAW MODE we bypass category filtering
-                if not self.raw_mode:
-                    if resource_category not in allow_categories:
-                        continue
-
-                    if resource_category in deny_categories:
-                        continue
 
                 for regex in regex_patterns:
                     try:
@@ -672,46 +679,16 @@ class DorkScanner:
                             else:
                                 match_str = str(match)[:100]  # Limit match length
 
-                            # Apply validation based on category
-                            is_valid = True
-                            verification_status = "Format valid"
-
-                            if cat == "CRYPTO":
-                                is_valid, verification_status = validate_crypto_pattern(p_name, match_str, self.raw_mode)
-                            elif cat == "SECRETS":
-                                is_valid, verification_status = validate_secret_pattern(p_name, match_str, self.raw_mode)
-
-                                # Additional API verification for supported services
-                                if is_valid and self.verify_api_keys and cat == "SECRETS" and not self.raw_mode:
-                                    # Run async verification in current thread
-                                    try:
-                                        loop = asyncio.new_event_loop()
-                                        asyncio.set_event_loop(loop)
-                                        verified, status = loop.run_until_complete(
-                                            verify_api_key(p_name, match_str)
-                                        )
-                                        loop.close()
-
-                                        if verified:
-                                            verification_status = f"Live verified: {status}"
-                                        else:
-                                            verification_status = f"Live check failed: {status}"
-                                            is_valid = False  # Mark as invalid if live check fails
-                                    except Exception as e:
-                                        verification_status = f"Verification error: {str(e)}"
-
-                            # In RAW MODE, show ALL matches
-                            # In STRICT MODE, only show valid matches
-                            if self.raw_mode or is_valid:
-                                findings.append({
-                                    'type': cat,
-                                    'pattern': p_name,
-                                    'url': url,
-                                    'match': match_str,
-                                    'verification': verification_status,
-                                    'resource_category': resource_category,
-                                    'resource_priority': resource['priority']
-                                })
+                            # Simple RAW status - no validation
+                            findings.append({
+                                'type': cat,
+                                'pattern': p_name,
+                                'url': url,
+                                'match': match_str,
+                                'verification': 'RAW',
+                                'resource_category': resource_category,
+                                'resource_priority': resource['priority']
+                            })
                     except re.error as e:
                         continue  # Skip invalid regex patterns
 
@@ -795,44 +772,6 @@ class DorkScanner:
         results['resource_stats'] = self.resource_stats
 
         return results
-
-    def crawl_domain(self, domain, max_pages=100):
-        """Crawl the domain to find additional URLs for scanning"""
-        visited = set()
-        to_visit = [f"https://{domain}", f"http://{domain}"]
-        found_urls = []
-
-        while to_visit and len(found_urls) < max_pages and not self.stop_event.is_set():
-            current_url = to_visit.pop(0)
-            if current_url in visited:
-                continue
-
-            visited.add(current_url)
-
-            try:
-                if self.proxies:
-                    proxy = random.choice(self.proxies)
-                    self.session.proxies = {'http': proxy, 'https': proxy}
-                self.session.headers['User-Agent'] = self.ua.random
-                time.sleep(random.uniform(self.delay, self.delay + 8))
-                response = self.session.get(current_url, timeout=5)
-                if response.status_code == 200:
-                    found_urls.append(current_url)
-
-                    # Extract links from the page
-                    soup = BeautifulSoup(response.text, 'html.parser')
-                    for link in soup.find_all('a', href=True):
-                        href = link['href']
-                        absolute_url = urljoin(current_url, href)
-                        parsed = urlparse(absolute_url)
-
-                        if parsed.netloc == domain and absolute_url not in visited:
-                            to_visit.append(absolute_url)
-
-            except:
-                continue
-
-        return found_urls
 
     def test_proxy(self, proxy):
         """Test if a proxy is working"""

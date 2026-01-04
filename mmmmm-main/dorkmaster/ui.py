@@ -11,6 +11,102 @@ from scanner import DorkScanner
 from patterns import DorkPatterns
 import xml.etree.ElementTree as ET
 
+# Translation Dictionary
+TRANSLATIONS = {
+    # Buttons
+    'start_scan': 'Начать сканирование',
+    'stop_scan': 'Остановить сканирование',
+    'save_results': 'Сохранить результаты',
+    'open_results': 'Открыть папку с результатами',
+    
+    # Settings
+    'scan_settings': 'Параметры сканирования',
+    'dork_query': 'Поисковый запрос:',
+    'category': 'Категория:',
+    'delay': 'Задержка (сек):',
+    'dns_verification': 'Проверка DNS',
+    'raw_mode': 'Режим RAW',
+    'rotate_ua': 'Ротация User-Agent',
+    'threads': 'Потоки:',
+    'depth': 'Глубина:',
+    'engines': 'Поисковики:',
+    
+    # Categories
+    'cat_all': 'ВСЕ',
+    'cat_crypto': 'КРИПТО',
+    'cat_secrets': 'СЕКРЕТЫ',
+    'cat_vulnerabilities': 'УЯЗВИМОСТИ',
+    
+    # Proxy
+    'proxy_mgmt': 'Управление прокси',
+    'proxy_type': 'Тип прокси:',
+    'load_file': 'Загрузить файл',
+    'test_all': 'Протестировать все',
+    'clear_all': 'Очистить все',
+    'add_proxy': 'Добавить прокси',
+    'proxy_col': 'Прокси',
+    'status_col': 'Статус',
+    'enter_proxy_msg': 'Введите прокси (ip:port или user:pass@ip:port):',
+    'add_btn': 'Добавить',
+    'working': 'Работает',
+    'failed': 'Ошибка',
+    'unknown': 'Неизвестно',
+    
+    # Stats
+    'urls_scanned_stat': 'Сканировано URL:',
+    'findings_stat': 'Найдено:',
+    'req_min_stat': 'Запр./мин:',
+    'wayback_urls_stat': 'URL из Wayback:',
+    'downloaded_stat': 'Загружено:',
+    'raw_matches_stat': 'Совпадений RAW:',
+    'mode_stat': 'Режим:',
+    'dns_stat': 'DNS:',
+    'proxies_stat': 'Прокси:',
+    'ua_rotation_stat': 'Ротация UA:',
+    'on': 'ВКЛ',
+    'off': 'ВЫКЛ',
+    'strict': 'СТРОГИЙ',
+    'raw': 'RAW',
+    
+    # Log & Findings
+    'log_label': 'Лог',
+    'findings_view': 'Результаты поиска',
+    'col_type': 'Тип',
+    'col_pattern': 'Паттерн',
+    'col_url': 'URL',
+    'col_match': 'Совпадение',
+    'col_status': 'Статус',
+    'col_verification': 'Проверка',
+    'ver_raw': 'RAW',
+    'ver_verified': 'ПРОВЕРЕНО',
+    
+    # Messages & Dialogs
+    'ready': 'Готов',
+    'error': 'Ошибка',
+    'success': 'Успех',
+    'warning': 'Внимание',
+    'info': 'Информация',
+    'enter_valid_dork': 'Пожалуйста, введите корректный поисковый запрос',
+    'scan_failed_msg': 'Ошибка сканирования: ',
+    'scan_completed_msg': 'Сканирование завершено',
+    'no_results_to_save': 'Нет результатов для сохранения',
+    'select_export_format': 'Выбор формата экспорта',
+    'choose_export_format': 'Выберите формат экспорта:',
+    'results_saved_to': 'Результаты сохранены в:',
+    'failed_to_save_results': 'Не удалось сохранить результаты: ',
+    'load_proxies_title': 'Загрузить прокси',
+    'text_files': 'Текстовые файлы',
+    'all_files': 'Все файлы',
+    'loaded_proxies_log': 'Загружено прокси из ',
+    'failed_to_load_proxies': 'Не удалось загрузить прокси: ',
+    'no_proxies_to_test': 'Нет прокси для тестирования',
+    'testing_x_proxies': 'Тестирование {count} прокси...',
+    'proxy_test_complete': 'Тестирование прокси завершено: {working}/{total} работают',
+    'all_proxies_cleared': 'Все прокси очищены',
+    'no_proxy_selected': 'Прокси не выбран',
+    'testing_proxy_log': 'Тестирование прокси: ',
+}
+
 class DorkStrikeUI:
     def __init__(self, root):
         self.root = root
@@ -52,70 +148,70 @@ class DorkStrikeUI:
         control_frame = ttk.Frame(main_frame)
         control_frame.pack(fill=tk.X, pady=(0, 10))
 
-        self.start_button = ttk.Button(control_frame, text="Start Scan", command=self.start_scan, width=12)
+        self.start_button = ttk.Button(control_frame, text=TRANSLATIONS['start_scan'], command=self.start_scan, width=18)
         self.start_button.pack(side=tk.LEFT, padx=2)
 
-        self.stop_button = ttk.Button(control_frame, text="Stop Scan", command=self.stop_scan, state=tk.DISABLED, width=12)
+        self.stop_button = ttk.Button(control_frame, text=TRANSLATIONS['stop_scan'], command=self.stop_scan, state=tk.DISABLED, width=22)
         self.stop_button.pack(side=tk.LEFT, padx=2)
 
-        self.save_results_button = ttk.Button(control_frame, text="Save Results", command=self.save_results, width=12, state=tk.DISABLED)
+        self.save_results_button = ttk.Button(control_frame, text=TRANSLATIONS['save_results'], command=self.save_results, width=20, state=tk.DISABLED)
         self.save_results_button.pack(side=tk.LEFT, padx=2)
 
-        self.open_results_button = ttk.Button(control_frame, text="Open Results Folder", command=self.open_results_folder, width=16)
+        self.open_results_button = ttk.Button(control_frame, text=TRANSLATIONS['open_results'], command=self.open_results_folder, width=28)
         self.open_results_button.pack(side=tk.LEFT, padx=2)
 
         # ========== SETTINGS FRAME ==========
-        settings_frame = ttk.LabelFrame(main_frame, text="Scan Settings", padding="10")
+        settings_frame = ttk.LabelFrame(main_frame, text=TRANSLATIONS['scan_settings'], padding="10")
         settings_frame.pack(fill=tk.X, pady=(0, 10))
 
         # Dork Query
-        ttk.Label(settings_frame, text="Dork Query:").grid(row=0, column=0, sticky=tk.W, padx=(0, 10))
+        ttk.Label(settings_frame, text=TRANSLATIONS['dork_query']).grid(row=0, column=0, sticky=tk.W, padx=(0, 10))
         self.dork_var = tk.StringVar()
         self.dork_entry = ttk.Entry(settings_frame, textvariable=self.dork_var, width=60)
         self.dork_entry.grid(row=0, column=1, columnspan=3, sticky=(tk.W, tk.E), padx=(0, 10))
         self.dork_entry.insert(0, "site:example.com filetype:env")
 
         # Category selection (moved here to replace domain)
-        ttk.Label(settings_frame, text="Category:").grid(row=0, column=4, sticky=tk.W, padx=(20, 10))
-        self.category_var = tk.StringVar(value="ALL")
+        ttk.Label(settings_frame, text=TRANSLATIONS['category']).grid(row=0, column=4, sticky=tk.W, padx=(20, 10))
+        self.category_var = tk.StringVar(value=TRANSLATIONS['cat_all'])
         category_combo = ttk.Combobox(settings_frame, textvariable=self.category_var,
-                                    values=["ALL", "CRYPTO", "SECRETS", "VULNERABILITIES"], state="readonly", width=12)
+                                    values=[TRANSLATIONS['cat_all'], TRANSLATIONS['cat_crypto'], TRANSLATIONS['cat_secrets'], TRANSLATIONS['cat_vulnerabilities']], state="readonly", width=15)
         category_combo.grid(row=0, column=5, sticky=tk.W, padx=(0, 10))
 
         # Delay and Toggles
-        ttk.Label(settings_frame, text="Delay (sec):").grid(row=1, column=0, sticky=tk.W, padx=(0, 10), pady=5)
+        ttk.Label(settings_frame, text=TRANSLATIONS['delay']).grid(row=1, column=0, sticky=tk.W, padx=(0, 10), pady=5)
         self.delay_var = tk.StringVar(value="5")
         delay_entry = ttk.Entry(settings_frame, textvariable=self.delay_var, width=8)
         delay_entry.grid(row=1, column=1, sticky=tk.W, padx=(0, 10), pady=5)
 
         # DNS Verification toggle
         self.dns_verify_var = tk.BooleanVar(value=True)
-        dns_check = ttk.Checkbutton(settings_frame, text="DNS Verification", variable=self.dns_verify_var)
+        dns_check = ttk.Checkbutton(settings_frame, text=TRANSLATIONS['dns_verification'], variable=self.dns_verify_var)
         dns_check.grid(row=1, column=2, sticky=tk.W, padx=(20, 10), pady=5)
 
         # RAW Mode toggle
         self.raw_mode_var = tk.BooleanVar(value=False)
-        raw_check = ttk.Checkbutton(settings_frame, text="RAW Mode", variable=self.raw_mode_var)
+        raw_check = ttk.Checkbutton(settings_frame, text=TRANSLATIONS['raw_mode'], variable=self.raw_mode_var)
         raw_check.grid(row=1, column=3, sticky=tk.W, padx=(10, 0), pady=5)
 
         # User Agent Rotation toggle
         self.ua_rotate_var = tk.BooleanVar(value=True)
-        ua_check = ttk.Checkbutton(settings_frame, text="Rotate User Agents", variable=self.ua_rotate_var)
+        ua_check = ttk.Checkbutton(settings_frame, text=TRANSLATIONS['rotate_ua'], variable=self.ua_rotate_var)
         ua_check.grid(row=2, column=0, sticky=tk.W, padx=(0, 10), pady=5)
 
         # Threads and Depth
-        ttk.Label(settings_frame, text="Threads:").grid(row=2, column=1, sticky=tk.W, padx=(20, 5), pady=5)
+        ttk.Label(settings_frame, text=TRANSLATIONS['threads']).grid(row=2, column=1, sticky=tk.W, padx=(20, 5), pady=5)
         self.threads_var = tk.IntVar(value=10)
         threads_spin = tk.Spinbox(settings_frame, from_=1, to=50, textvariable=self.threads_var, width=8)
         threads_spin.grid(row=2, column=2, sticky=tk.W, padx=(0, 10), pady=5)
 
-        ttk.Label(settings_frame, text="Depth:").grid(row=2, column=3, sticky=tk.W, padx=(5, 5), pady=5)
+        ttk.Label(settings_frame, text=TRANSLATIONS['depth']).grid(row=2, column=3, sticky=tk.W, padx=(5, 5), pady=5)
         self.depth_var = tk.IntVar(value=3)
         depth_spin = tk.Spinbox(settings_frame, from_=1, to=10, textvariable=self.depth_var, width=8)
         depth_spin.grid(row=2, column=4, sticky=tk.W, pady=5)
 
         # Search Engines
-        ttk.Label(settings_frame, text="Engines:").grid(row=3, column=0, sticky=tk.W, padx=(0, 10), pady=5)
+        ttk.Label(settings_frame, text=TRANSLATIONS['engines']).grid(row=3, column=0, sticky=tk.W, padx=(0, 10), pady=5)
         engines_frame = ttk.Frame(settings_frame)
         engines_frame.grid(row=3, column=1, columnspan=4, sticky=tk.W, pady=5)
 
@@ -128,12 +224,12 @@ class DorkStrikeUI:
             ttk.Checkbutton(engines_frame, text=engine_names[engine], variable=var).grid(row=0, column=i, sticky=tk.W, padx=(0, 15))
 
         # ========== PROXY FRAME ==========
-        proxy_frame = ttk.LabelFrame(main_frame, text="Proxy Management", padding="10")
+        proxy_frame = ttk.LabelFrame(main_frame, text=TRANSLATIONS['proxy_mgmt'], padding="10")
         proxy_frame.pack(fill=tk.X, pady=(0, 10))
         proxy_frame.columnconfigure(1, weight=1)
 
         # Proxy Type Dropdown
-        ttk.Label(proxy_frame, text="Proxy Type:").grid(row=0, column=0, sticky=tk.W, padx=(0, 10))
+        ttk.Label(proxy_frame, text=TRANSLATIONS['proxy_type']).grid(row=0, column=0, sticky=tk.W, padx=(0, 10))
         self.proxy_type_var = tk.StringVar(value="SOCKS5")
         proxy_type_combo = ttk.Combobox(proxy_frame, textvariable=self.proxy_type_var,
                                       values=["SOCKS5", "HTTPS", "HTTP"], state="readonly", width=10)
@@ -143,10 +239,10 @@ class DorkStrikeUI:
         proxy_btn_frame = ttk.Frame(proxy_frame)
         proxy_btn_frame.grid(row=0, column=2, sticky=tk.W)
 
-        ttk.Button(proxy_btn_frame, text="Load File", command=self.load_proxies_from_file, width=10).pack(side=tk.LEFT, padx=(5, 2))
-        ttk.Button(proxy_btn_frame, text="Test All", command=self.test_all_proxies, width=10).pack(side=tk.LEFT, padx=2)
-        ttk.Button(proxy_btn_frame, text="Clear All", command=self.clear_all_proxies, width=10).pack(side=tk.LEFT, padx=2)
-        ttk.Button(proxy_btn_frame, text="Add Proxy", command=self.add_proxy_dialog, width=10).pack(side=tk.LEFT, padx=2)
+        ttk.Button(proxy_btn_frame, text=TRANSLATIONS['load_file'], command=self.load_proxies_from_file, width=15).pack(side=tk.LEFT, padx=(5, 2))
+        ttk.Button(proxy_btn_frame, text=TRANSLATIONS['test_all'], command=self.test_all_proxies, width=15).pack(side=tk.LEFT, padx=2)
+        ttk.Button(proxy_btn_frame, text=TRANSLATIONS['clear_all'], command=self.clear_all_proxies, width=15).pack(side=tk.LEFT, padx=2)
+        ttk.Button(proxy_btn_frame, text=TRANSLATIONS['add_proxy'], command=self.add_proxy_dialog, width=15).pack(side=tk.LEFT, padx=2)
 
         # Proxy List with scrollbars
         proxy_list_frame = ttk.Frame(proxy_frame)
@@ -155,8 +251,8 @@ class DorkStrikeUI:
         proxy_list_frame.rowconfigure(0, weight=1)
 
         self.proxy_tree = ttk.Treeview(proxy_list_frame, columns=("Proxy", "Status"), show="headings", height=5)
-        self.proxy_tree.heading("Proxy", text="Proxy")
-        self.proxy_tree.heading("Status", text="Status")
+        self.proxy_tree.heading("Proxy", text=TRANSLATIONS['proxy_col'])
+        self.proxy_tree.heading("Status", text=TRANSLATIONS['status_col'])
         self.proxy_tree.column("Proxy", width=300)
         self.proxy_tree.column("Status", width=100)
         self.proxy_tree.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
@@ -175,17 +271,17 @@ class DorkStrikeUI:
         stats_frame.pack(fill=tk.X, pady=(0, 10))
 
         # Top stats line
-        self.stats_line1_var = tk.StringVar(value="URLs Scanned: 0 | Findings: 0 | Req/min: 0 | Wayback URLs: 0 | Downloaded: 0 | RAW Matches: 0")
+        self.stats_line1_var = tk.StringVar(value=f"{TRANSLATIONS['urls_scanned_stat']} 0 | {TRANSLATIONS['findings_stat']} 0 | {TRANSLATIONS['req_min_stat']} 0 | {TRANSLATIONS['wayback_urls_stat']} 0 | {TRANSLATIONS['downloaded_stat']} 0 | {TRANSLATIONS['raw_matches_stat']} 0")
         stats_line1 = ttk.Label(stats_frame, textvariable=self.stats_line1_var, font=("Courier", 9))
         stats_line1.pack(fill=tk.X)
 
         # Bottom stats line  
-        self.stats_line2_var = tk.StringVar(value="Mode: STRICT | DNS: ON | Proxies: 0 | UA Rotation: ON")
+        self.stats_line2_var = tk.StringVar(value=f"{TRANSLATIONS['mode_stat']} {TRANSLATIONS['strict']} | {TRANSLATIONS['dns_stat']} {TRANSLATIONS['on']} | {TRANSLATIONS['proxies_stat']} 0 | {TRANSLATIONS['ua_rotation_stat']} {TRANSLATIONS['on']}")
         stats_line2 = ttk.Label(stats_frame, textvariable=self.stats_line2_var, font=("Courier", 9))
         stats_line2.pack(fill=tk.X)
 
         # ========== LOG AREA ==========
-        log_frame = ttk.LabelFrame(main_frame, text="Log", padding="10")
+        log_frame = ttk.LabelFrame(main_frame, text=TRANSLATIONS['log_label'], padding="10")
         log_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
         log_frame.columnconfigure(0, weight=1)
         log_frame.rowconfigure(0, weight=1)
@@ -198,10 +294,18 @@ class DorkStrikeUI:
 
         # Findings treeview with Status column
         columns = ("Type", "Pattern", "URL", "Match", "Status", "Verification")
+        col_names = {
+            "Type": TRANSLATIONS['col_type'],
+            "Pattern": TRANSLATIONS['col_pattern'],
+            "URL": TRANSLATIONS['col_url'],
+            "Match": TRANSLATIONS['col_match'],
+            "Status": TRANSLATIONS['col_status'],
+            "Verification": TRANSLATIONS['col_verification']
+        }
         self.findings_tree = ttk.Treeview(findings_frame, columns=columns, show="headings", height=10)
 
         for col in columns:
-            self.findings_tree.heading(col, text=col)
+            self.findings_tree.heading(col, text=col_names[col])
             if col == "URL":
                 self.findings_tree.column(col, width=200)
             elif col == "Status":
@@ -220,14 +324,14 @@ class DorkStrikeUI:
         self.log_text.grid(row=1, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(5, 0))
 
         # Status bar
-        self.status_var = tk.StringVar(value="Ready")
+        self.status_var = tk.StringVar(value=TRANSLATIONS['ready'])
         status_bar = ttk.Label(main_frame, textvariable=self.status_var, relief=tk.SUNKEN, anchor=tk.W)
         status_bar.pack(fill=tk.X)
 
     def start_scan(self):
         dork = self.dork_var.get().strip()
         if not dork or dork == "site:example.com filetype:env":
-            messagebox.showerror("Error", "Please enter a valid dork query")
+            messagebox.showerror(TRANSLATIONS['error'], TRANSLATIONS['enter_valid_dork'])
             return
 
         if not self.scanning:
@@ -281,6 +385,15 @@ class DorkStrikeUI:
             self.scan_thread.start()
 
     def run_scan(self, dork, category, threads):
+        # Map category back to English for scanner
+        category_map = {
+            TRANSLATIONS['cat_all']: "ALL",
+            TRANSLATIONS['cat_crypto']: "CRYPTO",
+            TRANSLATIONS['cat_secrets']: "SECRETS",
+            TRANSLATIONS['cat_vulnerabilities']: "VULNERABILITIES"
+        }
+        internal_category = category_map.get(category, "ALL")
+
         try:
             # For this implementation, we'll use domain from dork if possible
             domain = "unknown"
@@ -291,7 +404,7 @@ class DorkStrikeUI:
                     domain = match.group(1)
 
             results = self.scanner.scan(
-                domain, category, threads,
+                domain, internal_category, threads,
                 self.progress_callback,
                 self.log_callback,
                 self.finding_callback
@@ -301,7 +414,7 @@ class DorkStrikeUI:
             self.root.after(0, lambda: self.update_statistics(results))
 
         except Exception as e:
-            self.root.after(0, lambda: messagebox.showerror("Error", f"Scan failed: {str(e)}"))
+            self.root.after(0, lambda: messagebox.showerror(TRANSLATIONS['error'], f"{TRANSLATIONS['scan_failed_msg']}{str(e)}"))
         finally:
             self.root.after(0, self.scan_finished)
 
@@ -315,7 +428,7 @@ class DorkStrikeUI:
         self.start_button.config(state=tk.NORMAL)
         self.stop_button.config(state=tk.DISABLED)
         self.save_results_button.config(state=tk.NORMAL)
-        self.status_var.set("Scan completed")
+        self.status_var.set(TRANSLATIONS['scan_completed_msg'])
 
     def progress_callback(self, progress):
         self.root.after(0, lambda: self.progress_var.set(progress))
@@ -333,16 +446,16 @@ class DorkStrikeUI:
         downloaded = getattr(self.scanner, 'download_success_count', 0)
         raw_matches = getattr(self.scanner, 'regex_match_count', 0)
         
-        line1 = f"URLs Scanned: {urls_scanned} | Findings: {findings} | Req/min: {req_per_min} | Wayback URLs: {wayback_urls} | Downloaded: {downloaded} | RAW Matches: {raw_matches}"
+        line1 = f"{TRANSLATIONS['urls_scanned_stat']} {urls_scanned} | {TRANSLATIONS['findings_stat']} {findings} | {TRANSLATIONS['req_min_stat']} {req_per_min} | {TRANSLATIONS['wayback_urls_stat']} {wayback_urls} | {TRANSLATIONS['downloaded_stat']} {downloaded} | {TRANSLATIONS['raw_matches_stat']} {raw_matches}"
         self.stats_line1_var.set(line1)
 
         # Line 2: Mode: STRICT | DNS: ON | Proxies: 0 | UA Rotation: ON
-        mode = "RAW" if self.scanner.raw_mode else "STRICT"
-        dns = "ON" if self.dns_verify_var.get() else "OFF"
+        mode = TRANSLATIONS['raw'] if self.scanner.raw_mode else TRANSLATIONS['strict']
+        dns = TRANSLATIONS['on'] if self.dns_verify_var.get() else TRANSLATIONS['off']
         proxies = len(self.proxies)
-        ua = "ON" if self.ua_rotate_var.get() else "OFF"
+        ua = TRANSLATIONS['on'] if self.ua_rotate_var.get() else TRANSLATIONS['off']
         
-        line2 = f"Mode: {mode} | DNS: {dns} | Proxies: {proxies} | UA Rotation: {ua}"
+        line2 = f"{TRANSLATIONS['mode_stat']} {mode} | {TRANSLATIONS['dns_stat']} {dns} | {TRANSLATIONS['proxies_stat']} {proxies} | {TRANSLATIONS['ua_rotation_stat']} {ua}"
         self.stats_line2_var.set(line2)
 
     def log_callback(self, message):
@@ -352,34 +465,44 @@ class DorkStrikeUI:
 
     def finding_callback(self, finding_type, pattern, url, match, verification):
         # Status is RAW by default (simplified analyze_response always returns RAW)
-        status = "RAW"
-        finding = (finding_type, pattern, url, match, status, verification)
+        status = TRANSLATIONS['raw']
+        
+        # Translate finding type
+        type_map = {
+            "CRYPTO": TRANSLATIONS['cat_crypto'],
+            "SECRETS": TRANSLATIONS['cat_secrets'],
+            "VULNERABILITIES": TRANSLATIONS['cat_vulnerabilities']
+        }
+        t_display = type_map.get(finding_type, finding_type)
+        
+        v_display = TRANSLATIONS['ver_verified'] if verification == "VERIFIED" else (TRANSLATIONS['ver_raw'] if verification == "RAW" else verification)
+        finding = (t_display, pattern, url, match, status, v_display)
         self.all_findings.append(finding)
         self.root.after(0, lambda: self.findings_tree.insert("", tk.END, values=finding))
 
     def update_statistics(self, results):
-        self.stats_line1_var.set(f"URLs Scanned: {results.get('total_urls', 0)} | Findings: {results.get('findings_count', 0)} | Req/min: {results.get('req_per_min', 0)} | Wayback URLs: {results.get('total_urls', 0)} | Downloaded: {results.get('download_success', 0)} | RAW Matches: {results.get('regex_matches', 0)}")
+        self.stats_line1_var.set(f"{TRANSLATIONS['urls_scanned_stat']} {results.get('total_urls', 0)} | {TRANSLATIONS['findings_stat']} {results.get('findings_count', 0)} | {TRANSLATIONS['req_min_stat']} {results.get('req_per_min', 0)} | {TRANSLATIONS['wayback_urls_stat']} {results.get('total_urls', 0)} | {TRANSLATIONS['downloaded_stat']} {results.get('download_success', 0)} | {TRANSLATIONS['raw_matches_stat']} {results.get('regex_matches', 0)}")
         
-        mode = "RAW" if self.scanner and self.scanner.raw_mode else "STRICT"
-        dns_status = "ON" if self.dns_verify_var.get() else "OFF"
+        mode = TRANSLATIONS['raw'] if self.scanner and self.scanner.raw_mode else TRANSLATIONS['strict']
+        dns_status = TRANSLATIONS['on'] if self.dns_verify_var.get() else TRANSLATIONS['off']
         proxy_count = len(self.proxies)
-        ua_status = "ON" if self.ua_rotate_var.get() else "OFF"
+        ua_status = TRANSLATIONS['on'] if self.ua_rotate_var.get() else TRANSLATIONS['off']
         
-        self.stats_line2_var.set(f"Mode: {mode} | DNS: {dns_status} | Proxies: {proxy_count} | UA Rotation: {ua_status}")
+        self.stats_line2_var.set(f"{TRANSLATIONS['mode_stat']} {mode} | {TRANSLATIONS['dns_stat']} {dns_status} | {TRANSLATIONS['proxies_stat']} {proxy_count} | {TRANSLATIONS['ua_rotation_stat']} {ua_status}")
 
     def save_results(self):
         if not self.all_findings:
-            messagebox.showwarning("Warning", "No results to save")
+            messagebox.showwarning(TRANSLATIONS['warning'], TRANSLATIONS['no_results_to_save'])
             return
 
         # Ask for format
         format_dialog = tk.Toplevel(self.root)
-        format_dialog.title("Select Export Format")
-        format_dialog.geometry("300x200")
+        format_dialog.title(TRANSLATIONS['select_export_format'])
+        format_dialog.geometry("300x220")
         format_dialog.transient(self.root)
         format_dialog.grab_set()
 
-        ttk.Label(format_dialog, text="Choose export format:").pack(pady=10)
+        ttk.Label(format_dialog, text=TRANSLATIONS['choose_export_format']).pack(pady=10)
 
         format_var = tk.StringVar(value="TXT")
         
@@ -402,16 +525,16 @@ class DorkStrikeUI:
             try:
                 if fmt == "TXT":
                     with open(filepath, 'w') as f:
-                        f.write(f"DorkStrike PRO Results\n")
-                        f.write(f"Generated: {datetime.now()}\n")
+                        f.write(f"Результаты DorkStrike PRO\n")
+                        f.write(f"Сгенерировано: {datetime.now()}\n")
                         f.write("="*50 + "\n\n")
                         for finding in self.all_findings:
-                            f.write(f"Type: {finding[0]}\n")
-                            f.write(f"Pattern: {finding[1]}\n")
-                            f.write(f"URL: {finding[2]}\n")
-                            f.write(f"Match: {finding[3]}\n")
-                            f.write(f"Status: {finding[4]}\n")
-                            f.write(f"Verification: {finding[5]}\n")
+                            f.write(f"{TRANSLATIONS['col_type']}: {finding[0]}\n")
+                            f.write(f"{TRANSLATIONS['col_pattern']}: {finding[1]}\n")
+                            f.write(f"{TRANSLATIONS['col_url']}: {finding[2]}\n")
+                            f.write(f"{TRANSLATIONS['col_match']}: {finding[3]}\n")
+                            f.write(f"{TRANSLATIONS['col_status']}: {finding[4]}\n")
+                            f.write(f"{TRANSLATIONS['col_verification']}: {finding[5]}\n")
                             f.write("-"*30 + "\n")
 
                 elif fmt == "JSON":
@@ -431,7 +554,7 @@ class DorkStrikeUI:
                 elif fmt == "CSV":
                     with open(filepath, 'w', newline='') as f:
                         writer = csv.writer(f)
-                        writer.writerow(["Type", "Pattern", "URL", "Match", "Status", "Verification"])
+                        writer.writerow([TRANSLATIONS['col_type'], TRANSLATIONS['col_pattern'], TRANSLATIONS['col_url'], TRANSLATIONS['col_match'], TRANSLATIONS['col_status'], TRANSLATIONS['col_verification']])
                         for finding in self.all_findings:
                             writer.writerow(finding)
 
@@ -449,12 +572,12 @@ class DorkStrikeUI:
                     tree = ET.ElementTree(root)
                     tree.write(filepath, encoding='utf-8', xml_declaration=True)
 
-                messagebox.showinfo("Success", f"Results saved to:\n{filepath}")
+                messagebox.showinfo(TRANSLATIONS['success'], f"{TRANSLATIONS['results_saved_to']}\n{filepath}")
 
             except Exception as e:
-                messagebox.showerror("Error", f"Failed to save results: {str(e)}")
+                messagebox.showerror(TRANSLATIONS['error'], f"{TRANSLATIONS['failed_to_save_results']}{str(e)}")
 
-        ttk.Button(format_dialog, text="Save", command=do_save).pack(pady=10)
+        ttk.Button(format_dialog, text=TRANSLATIONS['save'], command=do_save).pack(pady=10)
 
     def open_results_folder(self):
         results_dir = os.path.expanduser("~/Desktop/dorkmaster-results")
@@ -468,15 +591,15 @@ class DorkStrikeUI:
             elif os.path.exists('/usr/bin/open'):
                 os.system(f"open '{results_dir}'")
             else:
-                messagebox.showinfo("Info", f"Results folder:\n{results_dir}")
+                messagebox.showinfo(TRANSLATIONS['info'], f"{TRANSLATIONS['open_results']}:\n{results_dir}")
         else:
-            messagebox.showinfo("Info", f"Results folder:\n{results_dir}")
+            messagebox.showinfo(TRANSLATIONS['info'], f"{TRANSLATIONS['open_results']}:\n{results_dir}")
 
     # Proxy Management Functions
     def load_proxies_from_file(self):
         file_path = filedialog.askopenfilename(
-            title="Load Proxies",
-            filetypes=[("Text files", "*.txt"), ("All files", "*.*")]
+            title=TRANSLATIONS['load_proxies_title'],
+            filetypes=[(TRANSLATIONS['text_files'], "*.txt"), (TRANSLATIONS['all_files'], "*.*")]
         )
         if file_path:
             try:
@@ -485,27 +608,27 @@ class DorkStrikeUI:
                         proxy = line.strip()
                         if proxy and not proxy.startswith('#'):
                             self.add_proxy_to_list(proxy)
-                self.log_callback(f"Loaded proxies from {file_path}")
+                self.log_callback(f"{TRANSLATIONS['loaded_proxies_log']}{file_path}")
             except Exception as e:
-                messagebox.showerror("Error", f"Failed to load proxies: {str(e)}")
+                messagebox.showerror(TRANSLATIONS['error'], f"{TRANSLATIONS['failed_to_load_proxies']}{str(e)}")
 
     def test_all_proxies(self):
         if not self.proxies:
-            messagebox.showwarning("Warning", "No proxies to test")
+            messagebox.showwarning(TRANSLATIONS['warning'], TRANSLATIONS['no_proxies_to_test'])
             return
 
-        self.log_callback(f"Testing {len(self.proxies)} proxies...")
+        self.log_callback(TRANSLATIONS['testing_x_proxies'].format(count=len(self.proxies)))
         
         def test_thread():
             working = []
             for i, proxy in enumerate(self.proxies):
                 if self.scanner and self.scanner.test_proxy(proxy):
                     working.append(proxy)
-                    self.root.after(0, lambda p=proxy: self.update_proxy_status(p, "Working"))
+                    self.root.after(0, lambda p=proxy: self.update_proxy_status(p, TRANSLATIONS['working']))
                 else:
-                    self.root.after(0, lambda p=proxy: self.update_proxy_status(p, "Failed"))
+                    self.root.after(0, lambda p=proxy: self.update_proxy_status(p, TRANSLATIONS['failed']))
             
-            self.root.after(0, lambda: self.log_callback(f"Proxy test complete: {len(working)}/{len(self.proxies)} working"))
+            self.root.after(0, lambda: self.log_callback(TRANSLATIONS['proxy_test_complete'].format(working=len(working), total=len(self.proxies))))
         
         threading.Thread(target=test_thread, daemon=True).start()
 
@@ -513,16 +636,16 @@ class DorkStrikeUI:
         self.proxies = []
         for item in self.proxy_tree.get_children():
             self.proxy_tree.delete(item)
-        self.log_callback("All proxies cleared")
+        self.log_callback(TRANSLATIONS['all_proxies_cleared'])
 
     def add_proxy_dialog(self):
         dialog = tk.Toplevel(self.root)
-        dialog.title("Add Proxy")
-        dialog.geometry("400x100")
+        dialog.title(TRANSLATIONS['add_proxy'])
+        dialog.geometry("400x120")
         dialog.transient(self.root)
         dialog.grab_set()
 
-        ttk.Label(dialog, text="Enter proxy (ip:port or user:pass@ip:port):").pack(pady=5)
+        ttk.Label(dialog, text=TRANSLATIONS['enter_proxy_msg']).pack(pady=5)
         proxy_var = tk.StringVar()
         ttk.Entry(dialog, textvariable=proxy_var, width=40).pack(pady=5)
 
@@ -532,37 +655,37 @@ class DorkStrikeUI:
                 self.add_proxy_to_list(proxy)
                 dialog.destroy()
 
-        ttk.Button(dialog, text="Add", command=add).pack(pady=5)
+        ttk.Button(dialog, text=TRANSLATIONS['add_btn'], command=add).pack(pady=5)
 
     def add_proxy_to_list(self, proxy):
         if proxy not in self.proxies:
             self.proxies.append(proxy)
-            self.proxy_tree.insert("", tk.END, values=(proxy, "Unknown"))
+            self.proxy_tree.insert("", tk.END, values=(proxy, TRANSLATIONS['unknown']))
 
     def test_selected_proxy(self):
         selection = self.proxy_tree.selection()
         if not selection:
-            messagebox.showwarning("Warning", "No proxy selected")
+            messagebox.showwarning(TRANSLATIONS['warning'], TRANSLATIONS['no_proxy_selected'])
             return
 
         item = selection[0]
         values = self.proxy_tree.item(item)['values']
         proxy = values[0]
 
-        self.log_callback(f"Testing proxy: {proxy}")
+        self.log_callback(f"{TRANSLATIONS['testing_proxy_log']}{proxy}")
         
         def test():
             if self.scanner and self.scanner.test_proxy(proxy):
-                self.root.after(0, lambda: self.update_proxy_status(proxy, "Working"))
+                self.root.after(0, lambda: self.update_proxy_status(proxy, TRANSLATIONS['working']))
             else:
-                self.root.after(0, lambda: self.update_proxy_status(proxy, "Failed"))
+                self.root.after(0, lambda: self.update_proxy_status(proxy, TRANSLATIONS['failed']))
         
         threading.Thread(target=test, daemon=True).start()
 
     def delete_selected_proxy(self):
         selection = self.proxy_tree.selection()
         if not selection:
-            messagebox.showwarning("Warning", "No proxy selected")
+            messagebox.showwarning(TRANSLATIONS['warning'], TRANSLATIONS['no_proxy_selected'])
             return
 
         for item in selection:

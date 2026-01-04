@@ -2,7 +2,6 @@
 
 import asyncio
 import aiohttp
-import aiodns
 import requests
 import re
 import time
@@ -59,7 +58,7 @@ except ImportError:
     PLAYWRIGHT_AVAILABLE = False
 
 class DorkScanner:
-    def __init__(self, proxies=None, search_engines=None, use_js_rendering=False, verify_api_keys=False, strictness="medium", depth=3, custom_dorks=None, raw_mode=False, delay=5.0, dns_verify=True, proxy_type="SOCKS5", ua_rotate=True):
+    def __init__(self, proxies=None, search_engines=None, use_js_rendering=False, verify_api_keys=False, strictness="medium", depth=3, custom_dorks=None, raw_mode=False, delay=5.0, proxy_type="SOCKS5", ua_rotate=True, ui_callback=None):
         self.patterns = DorkPatterns()
         self.stop_event = threading.Event()
         self.session = requests.Session()
@@ -68,20 +67,18 @@ class DorkScanner:
         self.search_engines = search_engines or ['google']  # Default to Google
         self.use_js_rendering = use_js_rendering and PLAYWRIGHT_AVAILABLE
         self.verify_api_keys = verify_api_keys
-        self.dns_resolver = None
         self.strictness = strictness.lower()
         self.depth = depth
         self.request_count = 0
         self.custom_dorks = custom_dorks or []
         self.raw_mode = raw_mode
         self.delay = delay
-        self.dns_verify = dns_verify
         self.proxy_type = proxy_type
         self.ua_rotate = ua_rotate
+        self.ui_callback = ui_callback
         
         # Resource classification tracking
         self.resource_stats = {category: 0 for category in RESOURCE_CATEGORIES.keys()}
-        self.dns_passed_count = 0
         self.download_success_count = 0
         self.regex_match_count = 0
         self.findings_count = 0
@@ -151,7 +148,7 @@ class DorkScanner:
     def stop_scan(self):
         self.stop_event.set()
 
-    async def scan_async(self, target_domain, pattern_category, max_concurrent, progress_callback, log_callback, finding_callback):
+    async def scan_async(self, target_domain, pattern_category, max_concurrent, progress_callback, log_callback):
         """Async version of scan method overhauled for Wayback Pipeline"""
         start_time = time.time()
         self.target_domain = target_domain
@@ -191,7 +188,6 @@ class DorkScanner:
             'pattern_breakdown': {},
             'duration': 0,
             'avg_response_time': 0,
-            'dns_passed': 0,
             'download_success': 0,
             'regex_matches': 0
         }
@@ -199,15 +195,15 @@ class DorkScanner:
         findings = []
         response_times = []
 
-        # STAGE 2 & 3: FETCH AND MATCH
-        log_callback(f"\n[STAGE 2-3] FETCH & MATCH: Downloading content and analyzing patterns...")
+        # STAGE 2: FETCH AND MATCH
+        log_callback(f"\n[STAGE 2] FETCH & MATCH: Downloading content and analyzing patterns...")
         log_callback(f"Concurrent threads: {max_concurrent}")
 
         # Create semaphore to limit concurrent requests
         semaphore = asyncio.Semaphore(max_concurrent)
 
         # Create aiohttp session with connector settings
-        connector = aiohttp.TCPConnector(limit=max_concurrent, ttl_dns_cache=300)
+        connector = aiohttp.TCPConnector(limit=max_concurrent)
         timeout = aiohttp.ClientTimeout(total=20, connect=10)
 
         async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
@@ -228,13 +224,15 @@ class DorkScanner:
                     tasks = list(pending)
 
                     for task in done:
+                        if self.stop_event.is_set():
+                            break
                         try:
                             url_findings, response_time = task.result()
                             response_times.append(response_time)
                             findings.extend(url_findings)
 
                             for finding in url_findings:
-                                finding_callback(finding['type'], finding['pattern'], finding['url'], finding['match'], finding.get('verification', 'Format valid'))
+                                # Update results stats
                                 results['findings_count'] += 1
                                 self.findings_count += 1
 
@@ -251,7 +249,7 @@ class DorkScanner:
                         progress_callback(progress)
 
             # Process remaining tasks
-            if tasks:
+            if tasks and not self.stop_event.is_set():
                 done, _ = await asyncio.wait(tasks)
                 for task in done:
                     try:
@@ -260,7 +258,6 @@ class DorkScanner:
                         findings.extend(url_findings)
 
                         for finding in url_findings:
-                            finding_callback(finding['type'], finding['pattern'], finding['url'], finding['match'], finding.get('verification', 'Format valid'))
                             results['findings_count'] += 1
                             self.findings_count += 1
 
@@ -281,21 +278,13 @@ class DorkScanner:
             results['avg_response_time'] = sum(response_times) / len(response_times)
 
         # Update results with pipeline stats
-        results['dns_passed'] = self.dns_passed_count
         results['download_success'] = self.download_success_count
         results['regex_matches'] = self.regex_match_count
-        results['resource_stats'] = self.resource_stats
 
         # Log summary stages
-        log_callback(f"\n[STAGE 2] DNS VALIDATION: {self.dns_passed_count} domains resolved")
-        log_callback(f"[STAGE 3] CONTENT FETCH: {self.download_success_count} downloads successful ({total_urls - self.download_success_count} failed)")
-
-        # Log resource classification summary (Stage 4)
-        resource_summary = " | ".join([f"{cat}:{RESOURCE_CATEGORIES[cat][:8]}:{count}" for cat, count in self.resource_stats.items()])
-        log_callback(f"[STAGE 4] CLASSIFICATION: {resource_summary}")
-
-        log_callback(f"[STAGE 5] PATTERN MATCH: {self.regex_match_count} regex matches found")
-        log_callback(f"[STAGE 6] FINAL RESULTS: {results['findings_count']} findings reported")
+        log_callback(f"\n[STAGE 2] CONTENT FETCH: {self.download_success_count} downloads attempted")
+        log_callback(f"[STAGE 3] PATTERN MATCH: {self.regex_match_count} regex matches found")
+        log_callback(f"[STAGE 4] FINAL RESULTS: {results['findings_count']} findings reported")
 
         # Pattern breakdown
         if results['pattern_breakdown']:
@@ -310,7 +299,7 @@ class DorkScanner:
 
         return results
 
-    def scan(self, target_domain, pattern_category, max_concurrent, progress_callback, log_callback, finding_callback):
+    def scan(self, target_domain, pattern_category, max_concurrent, progress_callback, log_callback):
         """Main scan method - now uses asyncio internally"""
         self.stop_event.clear()
 
@@ -321,7 +310,7 @@ class DorkScanner:
         try:
             # Run the async scan
             results = loop.run_until_complete(
-                self.scan_async(target_domain, pattern_category, max_concurrent, progress_callback, log_callback, finding_callback)
+                self.scan_async(target_domain, pattern_category, max_concurrent, progress_callback, log_callback)
             )
             return results
         finally:
@@ -374,85 +363,44 @@ class DorkScanner:
         """
         Получить исторические URL для целевого домена из web.archive.org API.
         Использует Wayback CDX API для поиска снимков.
-        
-        Args:
-            target: целевой домен/URL
-            log_callback: функция для логирования прогресса
-            
-        Returns:
-            list: список URL найденных в Wayback Machine
         """
         found_urls = []
-        # Extended list of sensitive file extensions
-        extensions = [
-            "env", "json", "txt", "sql", "bak", "yml", "yaml", "conf",
-            "key", "pem", "crt", "p12", "pfx", "jks", "keystore",
-            "db", "sqlite", "sqlite3", "dump", "backup",
-            "zip", "tar", "tar.gz", "rar", "7z",
-            "log", "old", "save", "tmp", "orig", "swp",
-            "ini", "cfg", "config", "properties"
-        ]
-
         if log_callback:
-            log_callback(f"Wayback: Scanning {len(extensions)} file extensions for {target}...")
+            log_callback(f"Wayback: Fetching all URLs for {target}...")
 
         async with aiohttp.ClientSession() as session:
-            for ext in extensions:
-                if self.stop_event.is_set():
-                    break
+            # CDX API запрос: ищем все файлы на целевом домене
+            url = (
+                f"http://web.archive.org/cdx/search/cdx?url={target}/*"
+                f"&filter=statuscode:200"
+                f"&output=json"
+                f"&collapse=urlkey"
+                f"&limit=5000"
+            )
 
-                # CDX API запрос: ищем файлы с расширением на целевом домене
-                # Using multiple filters to get relevant results
-                url = (
-                    f"http://web.archive.org/cdx/search/cdx?url={target}/*"
-                    f"&filter=original:.*\\.{ext}"
-                    f"&filter=statuscode:200"
-                    f"&output=json"
-                    f"&collapse=urlkey"
-                    f"&limit=100"
-                )
-
-                try:
-                    async with session.get(url, timeout=15) as response:
-                        if response.status == 200:
-                            data = await response.json()
-                            # Пропускаем заголовок [["urlkey", "timestamp", "original", "mimetype", "statuscode", ...]]
-                            if len(data) > 1:
-                                ext_count = 0
-                                for item in data[1:]:
-                                    if len(item) >= 3:
-                                        original_url = item[2]
+            try:
+                async with session.get(url, timeout=30) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        if len(data) > 1:
+                            for item in data[1:]:
+                                if len(item) >= 3:
+                                    original_url = item[2]
+                                    # Skip binary files
+                                    if not any(original_url.lower().endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.gif', '.mp4', '.exe', '.pdf', '.woff', '.woff2', '.ttf', '.svg', '.ico']):
                                         found_urls.append(original_url)
-                                        ext_count += 1
-                                if log_callback and ext_count > 0:
-                                    log_callback(f"Wayback: Found {ext_count} .{ext} files")
-                        elif response.status == 429:
-                            if log_callback:
-                                log_callback(f"Wayback: Rate limited, waiting...")
-                            await asyncio.sleep(2)
+                    elif response.status == 429:
+                        if log_callback:
+                            log_callback(f"Wayback: Rate limited")
 
-                except asyncio.TimeoutError:
-                    if log_callback:
-                        log_callback(f"Wayback: Timeout for .{ext} files")
-                except Exception as e:
-                    if log_callback:
-                        log_callback(f"Wayback error ({ext}): {e}")
+            except Exception as e:
+                if log_callback:
+                    log_callback(f"Wayback error: {e}")
 
-        # Deduplicate URLs
         found_urls = list(set(found_urls))
         if log_callback:
             log_callback(f"Wayback: Total unique URLs found: {len(found_urls)}")
         return found_urls
-
-    async def check_dns_resolution(self, domain):
-        """Check if domain resolves to IP addresses"""
-        try:
-            if not self.dns_resolver:
-                self.dns_resolver = aiodns.DNSResolver()
-            result = await self.dns_resolver.query(domain, 'A')
-            return len(result) > 0
-        except:
-            return False
 
     def get_fresh_user_agent(self):
         """Get a fresh user agent, rotating frequently"""
@@ -500,23 +448,17 @@ class DorkScanner:
             return None
 
     async def scan_url_async(self, session, url_data, pattern_category, semaphore, log_callback=None):
-        """Async version of scan_url with DNS check"""
+        """Async version of scan_url"""
         url, pattern_name, category = url_data
         start_time = time.time()
 
+        if self.stop_event.is_set():
+            return [], 0
+
         async with semaphore:  # Limit concurrent requests
             try:
-                # Extract domain for DNS check
-                parsed = urlparse(url)
-                domain = parsed.netloc
-
-                # Check DNS resolution first
-                if not await self.check_dns_resolution(domain):
-                    if log_callback:
-                        log_callback(f"  [DNS FAIL] {url}")
-                    return [], time.time() - start_time
-
-                self.dns_passed_count += 1
+                if self.stop_event.is_set():
+                    return [], 0
 
                 # Use JS rendering if enabled
                 html_content = None
@@ -526,45 +468,46 @@ class DorkScanner:
                     html_content = await loop.run_in_executor(None, self.render_page_with_js, url)
                     if html_content:
                         self.download_success_count += 1
-                    else:
-                        if log_callback:
-                            log_callback(f"Download failed: JS rendering returned no content for {url}")
-                        return [], time.time() - start_time
                 else:
                     # Use aiohttp for regular requests
                     headers = {'User-Agent': self.get_fresh_user_agent()}
-                    timeout = aiohttp.ClientTimeout(total=10)
+                    # Use timeout as requested
+                    timeout = aiohttp.ClientTimeout(total=10, connect=5)
 
                     try:
                         async with session.get(url, headers=headers, timeout=timeout) as response:
-                            if response.status == 200:
-                                html_content = await response.text()
-                                self.download_success_count += 1
-                            else:
-                                if log_callback:
-                                    log_callback(f"Download failed: status {response.status} for {url}")
-                                return [], time.time() - start_time
+                            # Fetch everything as requested, not just 200
+                            html_content = await response.text()
+                            self.download_success_count += 1
                     except Exception as e:
                         if log_callback:
                             log_callback(f"Download failed: {str(e)} for {url}")
                         return [], time.time() - start_time
 
+                if self.stop_event.is_set():
+                    return [], time.time() - start_time
+
                 if html_content:
                     # Run analysis in thread pool since it's CPU-bound
                     loop = asyncio.get_event_loop()
                     result_tuple = await loop.run_in_executor(None, self.analyze_response, html_content, url, pattern_name, category)
+                    
+                    findings, _ = result_tuple if isinstance(result_tuple, tuple) else (result_tuple, None)
 
-                    # analyze_response now returns (findings, skip_reason)
-                    if isinstance(result_tuple, tuple) and len(result_tuple) == 2:
-                        findings, skip_reason = result_tuple
-                    else:
-                        # Backward compatibility - old return format (shouldn't happen but handle anyway)
-                        findings = result_tuple if result_tuple is not None else []
-                        skip_reason = None
+                    if self.stop_event.is_set():
+                        return [], time.time() - start_time
 
-                    # Log skip reasons
-                    if skip_reason and log_callback:
-                        log_callback(skip_reason)
+                    # Real-time push results
+                    for finding in findings:
+                        if self.ui_callback:
+                            self.ui_callback({
+                                'url': url,
+                                'source': 'WAYBACK',
+                                'pattern': finding['pattern'],
+                                'match': finding['match'],
+                                'status': 'RAW',
+                                'type': finding['type']
+                            })
 
                     return findings, time.time() - start_time
                 else:
@@ -585,6 +528,8 @@ class DorkScanner:
             if self.use_js_rendering:
                 html_content = self.render_page_with_js(url)
                 response_time = time.time() - start_time
+                if html_content:
+                    self.download_success_count += 1
             else:
                 # Fallback to regular requests
                 if self.proxies:
@@ -594,18 +539,26 @@ class DorkScanner:
                 time.sleep(random.uniform(self.delay, self.delay + 8))
                 response = self.session.get(url, timeout=10)
                 response_time = time.time() - start_time
-
-                if response.status_code == 200:
-                    html_content = response.text
-                else:
-                    return [], response_time
+                
+                # Fetch everything as requested
+                html_content = response.text
+                self.download_success_count += 1
 
             if html_content:
                 result_tuple = self.analyze_response(html_content, url, pattern_name, category)
-                if isinstance(result_tuple, tuple) and len(result_tuple) == 2:
-                    findings, skip_reason = result_tuple
-                else:
-                    findings = result_tuple
+                findings, _ = result_tuple if isinstance(result_tuple, tuple) else (result_tuple, None)
+                
+                # Real-time push results
+                for finding in findings:
+                    if self.ui_callback:
+                        self.ui_callback({
+                            'url': url,
+                            'source': 'WAYBACK',
+                            'pattern': finding['pattern'],
+                            'match': finding['match'],
+                            'status': 'RAW',
+                            'type': finding['type']
+                        })
                 return findings, response_time
             else:
                 return [], response_time
@@ -615,39 +568,9 @@ class DorkScanner:
 
     def analyze_response(self, html_content, url, pattern_name, category):
         """
-        Упрощенная функция анализа: просто ищет паттерны через re.findall()
-        и отправляет результат в UI без дополнительных проверок.
-        
-        Args:
-            html_content: текст для анализа
-            url: URL источника
-            pattern_name: имя паттерна для поиска
-            category: категория паттернов (CRYPTO, SECRETS, VULNERABILITIES, ALL)
-            
-        Returns:
-            tuple: (findings, skip_reason)
+        RAW MODE: никакой логики, только re.findall()
         """
         findings = []
-        skip_reason = None
-
-        # Check domain if target_domain is set
-        if self.target_domain and "://" in url:
-            parsed_url = urlparse(url)
-            if self.target_domain not in parsed_url.netloc:
-                skip_reason = f"URL rejected: external domain ({parsed_url.netloc})"
-                return findings, skip_reason
-
-        # Classify the resource
-        resource = self.classify_resource(url)
-        resource_category = resource['category']
-
-        # Update resource statistics
-        self.resource_stats[resource_category] += 1
-
-        # Skip if URL is blacklisted (Category E)
-        if resource_category == 'E':
-            skip_reason = f"URL rejected: blacklist ({url})"
-            return findings, skip_reason
 
         if category == "ALL":
             categories_to_check = ["CRYPTO", "SECRETS", "VULNERABILITIES"]
@@ -657,13 +580,11 @@ class DorkScanner:
         for cat in categories_to_check:
             patterns = self.patterns.get_patterns(cat)
 
-            patterns_to_check = {}
-            if pattern_name == "ALL" or pattern_name == "Custom Dork" or pattern_name == "CUSTOM":
-                patterns_to_check = patterns
-            elif pattern_name in patterns:
-                patterns_to_check = {pattern_name: patterns[pattern_name]}
+            for p_name, pattern_data in patterns.items():
+                # Filter by pattern_name if specified
+                if pattern_name != "ALL" and pattern_name != "CUSTOM" and pattern_name != p_name:
+                    continue
 
-            for p_name, pattern_data in patterns_to_check.items():
                 regex_patterns = pattern_data.get('regex', [])
 
                 for regex in regex_patterns:
@@ -674,28 +595,23 @@ class DorkScanner:
 
                             # Handle tuple matches from regex groups
                             if isinstance(match, tuple):
-                                # Use the last captured group (usually the actual value)
                                 match_str = str(match[-1])[:100] if match[-1] else str(match[0])[:100]
                             else:
-                                match_str = str(match)[:100]  # Limit match length
+                                match_str = str(match)[:100]
 
-                            # Simple RAW status - no validation
                             findings.append({
                                 'type': cat,
                                 'pattern': p_name,
                                 'url': url,
                                 'match': match_str,
                                 'verification': 'RAW',
-                                'resource_category': resource_category,
-                                'resource_priority': resource['priority']
+                                'status': 'RAW',
+                                'source': 'WAYBACK'
                             })
-                    except re.error as e:
-                        continue  # Skip invalid regex patterns
+                    except re.error:
+                        continue
 
-        if not findings:
-            skip_reason = f"No findings for {url}"
-
-        return findings, skip_reason
+        return findings, None
 
     def local_scan(self, file_paths, pattern_category, log_callback, finding_callback):
         self.total_urls = len(file_paths)
